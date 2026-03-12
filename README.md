@@ -5,6 +5,9 @@ Real-time Sign Language Recognition using Python, OpenCV, MediaPipe, and Machine
 This project detects hand signs from webcam, converts them to letters, builds words, and speaks the output.
 
 ---
+## Demo
+
+![Demo] (screenshot.png)
 
 ## Features
 
@@ -55,6 +58,7 @@ project_1/
 ├── word_system.py
 │
 ├── requirements.txt
+|__ screenshot.png
 └── README.md
 ```
 
