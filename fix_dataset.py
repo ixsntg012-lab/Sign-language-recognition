@@ -1,26 +1,37 @@
 import pandas as pd
 
+CSV_PATH = "data/signs.csv"
+
 # Load dataset
-df = pd.read_csv("data/signs.csv")
+df = pd.read_csv(CSV_PATH)
 
-# Function to limit samples per label
-def limit_label(df, label, max_count):
-    label_df = df[df["label"] == label]
-    other_df = df[df["label"] != label]
-    
-    label_df = label_df.iloc[:max_count]  # keep first N samples
-    
-    return pd.concat([other_df, label_df])
+print("Original samples:", len(df))
 
-# Limit letters to 50 each
-df = limit_label(df, "a", 50)
-df = limit_label(df, "b", 50)
-df = limit_label(df, "c", 50)
-df = limit_label(df, "d", 50)
-df = limit_label(df, "e", 50)
+# -----------------------------
+# Remove rows with missing data
+# -----------------------------
+df = df.dropna()
 
+# -----------------------------
+# Keep only valid labels (a-z)
+# -----------------------------
+df = df[df['label'].str.match("^[a-z]$")]
+
+# -----------------------------
+# Remove duplicate rows
+# -----------------------------
+df = df.drop_duplicates()
+
+# -----------------------------
+# Reset index
+# -----------------------------
+df = df.reset_index(drop=True)
+
+print("Cleaned samples:", len(df))
+
+# -----------------------------
 # Save cleaned dataset
-df.to_csv("data/signs.csv", index=False)
+# -----------------------------
+df.to_csv(CSV_PATH, index=False)
 
-print("Dataset balanced successfully.")
-print(df["label"].value_counts())
+print("Dataset cleaned and saved!")

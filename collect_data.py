@@ -1,7 +1,6 @@
 import cv2
 import csv
 import os
-import pandas as pd
 import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
@@ -12,6 +11,9 @@ CSV_PATH = os.path.join(DATA_DIR, "signs.csv")
 MODEL_PATH = "models/hand_landmarker.task"
 
 os.makedirs(DATA_DIR, exist_ok=True)
+
+# ---------- Letters (skip J and Z) ----------
+LETTERS = [l for l in "abcdefghijklmnopqrstuvwxyz" if l not in ["j","z"]]
 
 # ---------- Load MediaPipe model ----------
 base_options = python.BaseOptions(model_asset_path=MODEL_PATH)
@@ -31,7 +33,7 @@ HAND_CONNECTIONS = [
     (0,17)
 ]
 
-# ---------- Create CSV header if not exists ----------
+# ---------- Create CSV header ----------
 if not os.path.exists(CSV_PATH):
     with open(CSV_PATH, "w", newline="") as f:
         writer = csv.writer(f)
@@ -41,11 +43,23 @@ if not os.path.exists(CSV_PATH):
         header.append("label")
         writer.writerow(header)
 
+# ---------- Load counts ----------
+counts = {l:0 for l in LETTERS}
+
+if os.path.exists(CSV_PATH):
+    with open(CSV_PATH) as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            label = row["label"]
+            if label in counts:
+                counts[label] += 1
+
 # ---------- Camera ----------
 cap = cv2.VideoCapture(0)
 
 print("Instructions:")
-print("Show a sign and press one of: a b c d e")
+print("Press letters a-z to collect samples")
+print("J and Z skipped (dynamic gestures)")
 print("Press q to quit")
 
 while True:
@@ -57,56 +71,38 @@ while True:
     mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
     result = detector.detect(mp_image)
 
-    # ---------- Draw landmarks ----------
+    #Draw landmarks
     if result.hand_landmarks:
         hand = result.hand_landmarks[0]
         h, w, _ = frame.shape
 
-        # Draw skeleton lines (purple)
         for s, e in HAND_CONNECTIONS:
             x1, y1 = int(hand[s].x * w), int(hand[s].y * h)
             x2, y2 = int(hand[e].x * w), int(hand[e].y * h)
-            cv2.line(frame, (x1, y1), (x2, y2), (200, 0, 200), 2)
+            cv2.line(frame, (x1, y1), (x2, y2), (200,0,200), 2)
 
-        # Draw small purple points
         for lm in hand:
             x, y = int(lm.x * w), int(lm.y * h)
-            cv2.circle(frame, (x, y), 3, (255, 0, 255), -1)
+            cv2.circle(frame, (x,y), 3, (255,0,255), -1)
 
-    # ---------- Count samples ----------
-    if os.path.exists(CSV_PATH):
-        df = pd.read_csv(CSV_PATH)
-        counts = df['label'].value_counts().to_dict()
-    else:
-        counts = {}
+    #Counter text
+    letters1 = LETTERS[:12]
+    letters2 = LETTERS[12:]
 
-    count_text = " | ".join([
-        f"A:{counts.get('a',0)}",
-        f"B:{counts.get('b',0)}",
-        f"C:{counts.get('c',0)}",
-        f"D:{counts.get('d',0)}",
-        f"E:{counts.get('e',0)}"
-    ])
+    line1 = " ".join([f"{l.upper()}:{counts[l]}" for l in letters1])
+    line2 = " ".join([f"{l.upper()}:{counts[l]}" for l in letters2])
 
-    # ---------- Sage Green Color ----------
-    sage_green = (85, 140, 85)  # BGR format
+    sage_green = (85,140,85)
+
+    cv2.putText(frame, line1, (20,30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, sage_green, 2)
+    cv2.putText(frame, line2, (20,55), cv2.FONT_HERSHEY_SIMPLEX, 0.5, sage_green, 2)
 
     cv2.putText(
         frame,
-        count_text,
-        (20, 30),
+        "Press A-Z to save | J,Z skipped | Q to quit",
+        (20,85),
         cv2.FONT_HERSHEY_SIMPLEX,
-        0.6,
-        sage_green,
-        2
-    )
-
-    cv2.putText(
-        frame,
-        "Press a/b/c/d/e to save | q to quit",
-        (20, 60),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.6,
+        0.5,
         sage_green,
         2
     )
@@ -115,21 +111,29 @@ while True:
 
     key = cv2.waitKey(1) & 0xFF
 
-    # ---------- Save sample ----------
-    if result.hand_landmarks and key in [ord('a'), ord('b'), ord('c'), ord('d'), ord('e')]:
-        hand = result.hand_landmarks[0]
-        row = []
-        for lm in hand:
-            row.extend([lm.x, lm.y, lm.z])
-        row.append(chr(key))
+    #Save sample
+    if result.hand_landmarks and ord('a') <= key <= ord('z'):
+        letter = chr(key)
 
-        with open(CSV_PATH, "a", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow(row)
+        if letter in LETTERS:
 
-        print(f"Saved sample for letter: {chr(key).upper()}")
+            hand = result.hand_landmarks[0]
+            row = []
 
-    if key == ord('q'):
+            for lm in hand:
+                row.extend([lm.x, lm.y, lm.z])
+
+            row.append(letter)
+
+            with open(CSV_PATH, "a", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(row)
+
+            counts[letter] += 1
+
+            print(f"Saved sample for: {letter.upper()}")
+
+    if key == 27:
         break
 
 cap.release()
